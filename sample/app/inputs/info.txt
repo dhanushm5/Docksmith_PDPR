@@ -1,0 +1,2 @@
+docksmith from scratch
+This is a minimal Docker-like build system.

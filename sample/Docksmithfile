@@ -1,0 +1,7 @@
+FROM ubuntu:20.04
+COPY inputs /app/inputs
+COPY app.py /app/app.py
+RUN apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV GREETING="Welcome"
+CMD ["python3", "app.py"]
