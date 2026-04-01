@@ -13,7 +13,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 SAMPLE_DIR="$PROJECT_ROOT/sample"
 
 # Colors for output
@@ -43,7 +43,7 @@ print_success "State cleared"
 # Build the docksmith binary
 print_section "Building docksmith binary"
 cd "$PROJECT_ROOT"
-go build -o docksmith main.go || {
+go build -o docksmith || {
     print_warning "Failed to build. Make sure you have Go installed and are running from project root"
     exit 1
 }
@@ -55,33 +55,50 @@ print_section "Setting up base images"
 # Create a minimal base image for demo
 # In production, this would extract a real Ubuntu image
 echo "Importing base image ubuntu:20.04"
-mkdir -p /tmp/docksmith-base
-# This would typically extract from Docker, but for demo we'll use debootstrap or similar
-# For now, just create a minimal structure
-print_warning "Base image import skipped (requires Docker or pre-built image)"
-print_warning "In production, base images are downloaded and cached during setup phase"
+
+# Try to import from Docker if available
+if command -v docker &> /dev/null && docker ps &> /dev/null; then
+    if docker inspect ubuntu:20.04 &> /dev/null; then
+        print_success "Docker image ubuntu:20.04 found. Importing into Docksmith..."
+        "$PROJECT_ROOT/scripts/import_docker_image.sh" ubuntu:20.04 || {
+            print_warning "Failed to import Docker image (may require additional setup)"
+        }
+    else
+        print_warning "Docker image ubuntu:20.04 not found locally"
+        print_warning "To use Docker images, run: docker pull ubuntu:20.04"
+    fi
+else
+    print_warning "Docker not available - base image import skipped"
+    print_warning "In production, base images are downloaded and cached during setup phase"
+fi
 
 # Build sample image with cold cache (all misses)
 print_section "PHASE 1: Cold build (all cache misses)"
 cd "$SAMPLE_DIR"
 
 echo "Building docksmith-sample:latest..."
-if ! "$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1 | grep -q "CACHE MISS"; then
-    echo "First build would show all cache misses"
+if "$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1 | grep -q "CACHE MISS"; then
+    echo "First build showed cache misses"
+else
+    print_warning "Build failed (requires base image ubuntu:20.04 - ensure Docker is running)"
 fi
-print_success "Image built"
+print_success "Image built (or skipped due to missing base image)"
 
 # List images
 print_section "PHASE 2: List images"
-"$PROJECT_ROOT/docksmith" images
+"$PROJECT_ROOT/docksmith" images || {
+    print_warning "Image listing failed or no images available"
+}
 
 # Rebuild image without changes (all cache hits)
 print_section "PHASE 3: Warm build (all cache hits)"
 echo "Rebuilding docksmith-sample:latest without changes..."
-if ! "$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1 | grep -q "CACHE HIT"; then
-    echo "Second build would show all cache hits"
+if "$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1 | grep -q "CACHE HIT"; then
+    echo "Second build showed all cache hits"
+else
+    print_warning "Rebuild skipped (requires base image)"
 fi
-print_success "Image rebuilt (should use cache)"
+print_success "Image rebuilt (or skipped due to missing base image)"
 
 # Edit source file (will cause some cache misses)
 print_section "PHASE 4: Source edit (partial misses)"
@@ -92,8 +109,10 @@ EOF
 print_success "Source file modified"
 
 echo "Rebuilding with modified source..."
-"$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1
-print_success "Rebuild with source change complete"
+"$PROJECT_ROOT/docksmith" build -t docksmith-sample:latest . 2>&1 || {
+    print_warning "Rebuild failed (requires base image ubuntu:20.04 - ensure Docker is running)"
+}
+print_success "Rebuild with source change complete (or skipped)"
 
 # Run container with default command
 print_section "PHASE 5: Running containers"
@@ -124,14 +143,20 @@ fi
 # Remove image
 print_section "PHASE 8: Image removal"
 echo "Listing images before removal..."
-"$PROJECT_ROOT/docksmith" images
+"$PROJECT_ROOT/docksmith" images || {
+    print_warning "No images to list"
+}
 
 echo "Removing docksmith-sample:latest..."
-"$PROJECT_ROOT/docksmith" rmi docksmith-sample:latest
-print_success "Image removed"
+"$PROJECT_ROOT/docksmith" rmi docksmith-sample:latest || {
+    print_warning "Image removal failed (no images built)"
+}
+print_success "Image removed (or skipped)"
 
 echo "Listing images after removal..."
-"$PROJECT_ROOT/docksmith" images
+"$PROJECT_ROOT/docksmith" images || {
+    print_warning "No images remaining"
+}
 
 print_success "Demo completed!"
 echo ""
