@@ -1,0 +1,24 @@
+{
+  "name": "myapp",
+  "tag": "latest",
+  "digest": "a0df2a63b595f61b0332c96c87ab9b03a6cc652bafe931b998926a17afdf0450",
+  "created": "2026-04-10T13:09:53Z",
+  "config": {
+    "workingDir": "/app",
+    "env": [
+      "APP_NAME=docksmith-demo",
+      "GREETING=Hello",
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    ],
+    "cmd": [
+      "/bin/sh",
+      "-c",
+      "[\"sh\", \"/app/run.sh\"]"
+    ]
+  },
+  "layers": [
+    "14b0f07923050dc1d603bfb5086b55eba2f579b368c5932e99942e55c89d32f6",
+    "95971acc2c67e216b451a4a3941cc43c9e8facc09d5255dfea585e3b8f7473ea",
+    "19244aee9da8cee40288950f065324de76572def9b17488b238845a03687c454"
+  ]
+}
