@@ -1,0 +1,18 @@
+{
+  "name": "alpine",
+  "tag": "3.18",
+  "digest": "32359ef8888d4dc2147543f2bca3e73295632d80d864ff5cdb63deff26d3f3aa",
+  "created": "2026-04-15T15:23:11Z",
+  "config": {
+    "workingDir": "/",
+    "env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    ],
+    "cmd": [
+      "/bin/sh"
+    ]
+  },
+  "layers": [
+    "f710170bb1df8dde3bd5da0c54b3b0ae72cd7582e5a9925e06ce425bb4b74c0c"
+  ]
+}

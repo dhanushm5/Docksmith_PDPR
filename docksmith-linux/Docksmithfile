@@ -1,0 +1,6 @@
+FROM scratch
+WORKDIR /app
+COPY sample-app /app
+ENV APP_MODE=default
+RUN /bin/sh -c 'echo "Built by docksmith" > /app/build-info.txt'
+CMD python3 /app/main.py
