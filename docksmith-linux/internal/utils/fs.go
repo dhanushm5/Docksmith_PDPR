@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -67,6 +68,20 @@ func ResolveStoreRoot() (string, error) {
 			return "", err
 		}
 		return custom, nil
+	}
+
+	if os.Geteuid() == 0 {
+		sudoUser := strings.TrimSpace(os.Getenv("SUDO_USER"))
+		if sudoUser != "" {
+			u, err := user.Lookup(sudoUser)
+			if err == nil && strings.TrimSpace(u.HomeDir) != "" {
+				storeRoot := filepath.Join(u.HomeDir, ".docksmith")
+				if err := EnsureDir(storeRoot); err != nil {
+					return "", err
+				}
+				return storeRoot, nil
+			}
+		}
 	}
 
 	home, err := os.UserHomeDir()

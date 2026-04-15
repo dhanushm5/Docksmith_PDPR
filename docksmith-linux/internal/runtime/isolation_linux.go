@@ -7,13 +7,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
 )
 
 func executeIsolated(opts ExecOptions) (int, error) {
-	cmd := exec.Command(opts.Command[0], opts.Command[1:]...)
+	cmdPath, err := resolveCommandPath(opts.RootFS, opts.Command[0], opts.Env)
+	if err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(cmdPath, opts.Command[1:]...)
 	cmd.Env = append([]string(nil), opts.Env...)
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
@@ -28,11 +33,11 @@ func executeIsolated(opts ExecOptions) (int, error) {
 			syscall.CLONE_NEWNET,
 	}
 
-	err := cmd.Run()
-	if err == nil {
+	runErr := cmd.Run()
+	if runErr == nil {
 		return 0, nil
 	}
-	if errors.Is(err, syscall.EPERM) {
+	if errors.Is(runErr, syscall.EPERM) {
 		w := opts.Stderr
 		if w == nil {
 			w = os.Stderr
@@ -40,12 +45,12 @@ func executeIsolated(opts ExecOptions) (int, error) {
 		fmt.Fprintln(w, "docksmith: strict linux isolation unavailable (operation not permitted); falling back to compatibility mode")
 		return executeCompat(opts)
 	}
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	if exitErr, ok := runErr.(*exec.ExitError); ok {
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 			return status.ExitStatus(), nil
 		}
 	}
-	return 0, fmt.Errorf("run isolated command: %w", err)
+	return 0, fmt.Errorf("run isolated command: %w", runErr)
 }
 
 func executeCompat(opts ExecOptions) (int, error) {
@@ -59,6 +64,11 @@ func executeCompat(opts ExecOptions) (int, error) {
 	}
 	if workDir == "" {
 		workDir = opts.RootFS
+	}
+
+	cmdPath, err := resolveCommandPath(opts.RootFS, opts.Command[0], opts.Env)
+	if err != nil {
+		return 0, err
 	}
 
 	cmdArgs := append([]string(nil), opts.Command...)
@@ -77,21 +87,59 @@ func executeCompat(opts ExecOptions) (int, error) {
 		}
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd := exec.Command(cmdPath, cmdArgs[1:]...)
 	cmd.Env = append([]string(nil), opts.Env...)
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
 	cmd.Stdin = opts.Stdin
 	cmd.Dir = workDir
 
-	err := cmd.Run()
-	if err == nil {
+	runErr := cmd.Run()
+	if runErr == nil {
 		return 0, nil
 	}
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	if exitErr, ok := runErr.(*exec.ExitError); ok {
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 			return status.ExitStatus(), nil
 		}
 	}
-	return 0, fmt.Errorf("run command in compatibility mode: %w", err)
+	return 0, fmt.Errorf("run command in compatibility mode: %w", runErr)
+}
+
+func resolveCommandPath(rootfs, command string, env []string) (string, error) {
+	if command == "" {
+		return "", fmt.Errorf("empty command")
+	}
+	if strings.Contains(command, "/") {
+		return command, nil
+	}
+
+	searchPath := "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	for _, item := range env {
+		if strings.HasPrefix(item, "PATH=") {
+			searchPath = strings.TrimPrefix(item, "PATH=")
+			break
+		}
+	}
+
+	for _, dir := range strings.Split(searchPath, ":") {
+		if dir == "" {
+			continue
+		}
+		candidateRel := strings.TrimPrefix(path.Join(dir, command), "/")
+		candidate := filepath.Join(rootfs, filepath.FromSlash(candidateRel))
+		if info, err := os.Lstat(candidate); err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return path.Join(dir, command), nil
+			}
+			if info.Mode()&0o111 != 0 {
+				return path.Join(dir, command), nil
+			}
+		}
+		if info, err := os.Stat(candidate); err == nil && info.Mode()&0o111 != 0 {
+			return path.Join(dir, command), nil
+		}
+	}
+
+	return "", fmt.Errorf("executable %q not found in rootfs", command)
 }

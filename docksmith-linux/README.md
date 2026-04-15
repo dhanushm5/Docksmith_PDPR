@@ -108,4 +108,5 @@ APP_MODE=override sudo ./docksmith run sample:latest
 - `RUN` during build and `docksmith run` both use the same Linux isolation path.
 - Isolation requires Linux with privileges that allow namespace + `chroot` operations.
 - If strict isolation is blocked by host policy/capabilities, Docksmith automatically falls back to compatibility mode so local builds/runs still work.
+- When invoked with `sudo`, Docksmith reuses the invoking user's `~/.docksmith` store by default.
 - Build and run are local-only; `docksmith setup` performs a one-time Alpine rootfs download.
