@@ -59,9 +59,19 @@ func (s *Store) LoadByRef(raw string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
+
+	// Try exact match first
 	digest, ok := tags[raw]
 	if !ok {
-		return Manifest{}, fmt.Errorf("image %q not found in local store", raw)
+		// If no exact match and raw doesn't contain ":", try with :latest suffix
+		if !strings.Contains(raw, ":") {
+			digest, ok = tags[raw+":latest"]
+			if !ok {
+				return Manifest{}, fmt.Errorf("image %q not found in local store", raw)
+			}
+		} else {
+			return Manifest{}, fmt.Errorf("image %q not found in local store", raw)
+		}
 	}
 
 	payload, err := s.storage.LoadManifestJSON(digest)
