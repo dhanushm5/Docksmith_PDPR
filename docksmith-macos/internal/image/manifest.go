@@ -34,6 +34,17 @@ func NewManifest(name, tag string, cfg Config, layers []string) Manifest {
 	}
 }
 
+func NewManifestWithCreated(name, tag string, cfg Config, layers []string, created string) Manifest {
+	return Manifest{
+		Name:    name,
+		Tag:     tag,
+		Digest:  "",
+		Created: created,
+		Config:  cfg,
+		Layers:  append([]string(nil), layers...),
+	}
+}
+
 func ComputeDigest(m Manifest) (string, error) {
 	clone := m
 	clone.Digest = ""

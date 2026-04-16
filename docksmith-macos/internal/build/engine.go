@@ -154,7 +154,19 @@ func (e *Engine) Build(opts BuildOptions) (image.Manifest, error) {
 	}
 
 	state.Env = utils.SortedEnvKV(envMap)
-	manifest := image.NewManifest(ref.Name, ref.Tag, state, layers)
+
+	// Try to load existing manifest to preserve timestamp on cache hits
+	var created string
+	oldManifest, err := e.imageStore.LoadByRef(ref.Name + ":" + ref.Tag)
+	if err == nil && layersEqual(oldManifest.Layers, layers) {
+		// All cache hits - preserve original timestamp
+		created = oldManifest.Created
+	} else {
+		// New build - generate new timestamp
+		created = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	manifest := image.NewManifestWithCreated(ref.Name, ref.Tag, state, layers, created)
 	stored, err := e.imageStore.Save(manifest)
 	if err != nil {
 		return image.Manifest{}, err
@@ -256,6 +268,18 @@ func lastLayerDigest(layers []string) string {
 		return ""
 	}
 	return layers[len(layers)-1]
+}
+
+func layersEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeWorkDir(current, next string) string {
